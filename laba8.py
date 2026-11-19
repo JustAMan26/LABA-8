@@ -1,206 +1,141 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import os
+from tkinter import messagebox
 
-# ---------------------------------------------------------
-# Вспомогательная функция для изменения яркости HEX-цвета
-# (нужна для создания эффекта 3D: светлая верхняя грань, темная боковая)
-# ---------------------------------------------------------
-def adjust_color(color, factor):
-    """Изменяет яркость HEX-цвета. factor > 1 осветляет, < 1 затемняет."""
-    if not color.startswith('#') or len(color) != 7:
-        return color  # Если передан именованный цвет, возвращаем как есть
-    try:
-        r = int(color[1:3], 16)
-        g = int(color[3:5], 16)
-        b = int(color[5:7], 16)
-        r = max(0, min(255, int(r * factor)))
-        g = max(0, min(255, int(g * factor)))
-        b = max(0, min(255, int(b * factor)))
-        return f"#{r:02x}{g:02x}{b:02x}"
-    except ValueError:
-        return color
+def create_test_data(filename):
+    """Создание тестового текстового файла с данными"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write("01.10 15.2\n")
+        f.write("02.10 16.5\n")
+        f.write("03.10 14.8\n")
+        f.write("04.10 17.1\n")
+        f.write("05.10 15.9\n")
+        f.write("06.10 18.3\n")
+        f.write("07.10 19.0\n")
+        f.write("08.10 17.5\n")
 
-# ---------------------------------------------------------
-# Основная процедура построения 3D столбиковой диаграммы
-# Параметры: canvas, массив дат, кол-во дней, массив значений, код заполнителя
-# ---------------------------------------------------------
-def draw_3d_bar_chart(canvas, dates, n_days, y_values, fill_code):
-    canvas.delete("all")  # Очистка холста
-    
-    if n_days == 0 or not y_values:
-        messagebox.showwarning("Ошибка", "Нет данных для построения диаграммы.")
-        return
-
-    # Отступы для осей и подписей
-    margin_left = 70
-    margin_right = 40
-    margin_top = 60
-    margin_bottom = 80
-
-    # Получаем актуальные размеры холста
-    canvas.update()
-    width = canvas.winfo_width()
-    height = canvas.winfo_height()
-    
-    # Если холст еще не отрисован, берем начальные размеры
-    if width < 100: width = 800
-    if height < 100: height = 600
-
-    plot_width = width - margin_left - margin_right
-    plot_height = height - margin_top - margin_bottom
-
-    # Масштабирование по оси Y
-    max_y = max(y_values) * 1.2  # Добавляем 20% места сверху для красоты
-    min_y = 0.0
-
-    # Параметры столбиков
-    bar_width = (plot_width / n_days) * 0.6  # Ширина столбика
-    gap = (plot_width / n_days) * 0.4        # Расстояние между столбиками
-    depth = 15                               # Глубина 3D-эффекта (смещение в пикселях)
-
-    # --- Рисуем заголовок ---
-    canvas.create_text(width // 2, 25, text="Курс немецкой марки к рублю", 
-                       font=("Arial", 14, "bold"), fill="black")
-    canvas.create_text(width // 2, 45, text="(за заданный период)", 
-                       font=("Arial", 10), fill="gray")
-
-    # --- Рисуем оси координат ---
-    # Ось Y
-    canvas.create_line(margin_left, margin_top, margin_left, height - margin_bottom, width=2)
-    # Ось X
-    canvas.create_line(margin_left, height - margin_bottom, width - margin_right, height - margin_bottom, width=2)
-    
-    # Подписи осей
-    canvas.create_text(30, height // 2, text="Курс (руб.)", angle=90, font=("Arial", 11, "bold"))
-    canvas.create_text(width // 2, height - 20, text="Дата", font=("Arial", 11, "bold"))
-
-    # --- Градация оси Y ---
-    num_ticks = 6
-    for i in range(num_ticks + 1):
-        val = min_y + (max_y - min_y) * (i / num_ticks)
-        y_pos = height - margin_bottom - (plot_height * (i / num_ticks))
-        
-        # Значение
-        canvas.create_text(margin_left - 10, y_pos, text=f"{val:.1f}", anchor="e", font=("Arial", 10))
-        # Штрих
-        canvas.create_line(margin_left - 5, y_pos, margin_left, y_pos, width=1)
-        # Сетка (пунктир)
-        canvas.create_line(margin_left, y_pos, width - margin_right, y_pos, dash=(3, 3), fill="lightgray")
-
-    # --- Рисуем 3D столбики ---
-    for i in range(n_days):
-        x_start = margin_left + i * (bar_width + gap) + gap / 2
-        x_end = x_start + bar_width
-
-        val = y_values[i]
-        bar_height_px = (val / max_y) * plot_height
-        y_start = height - margin_bottom - bar_height_px
-        y_end = height - margin_bottom
-
-        # Цвета для граней 3D
-        color_front = fill_code
-        color_top = adjust_color(fill_code, 1.3)    # Светлее
-        color_right = adjust_color(fill_code, 0.7)  # Темнее
-
-        # 1. Передняя грань (прямоугольник)
-        canvas.create_rectangle(x_start, y_start, x_end, y_end, 
-                                fill=color_front, outline="black", width=1)
-
-        # 2. Верхняя грань (параллелограмм)
-        top_poly = [
-            x_start, y_start,
-            x_end, y_start,
-            x_end + depth, y_start - depth,
-            x_start + depth, y_start - depth
-        ]
-        canvas.create_polygon(top_poly, fill=color_top, outline="black", width=1)
-
-        # 3. Правая боковая грань (параллелограмм)
-        right_poly = [
-            x_end, y_start,
-            x_end, y_end,
-            x_end + depth, y_end - depth,
-            x_end + depth, y_start - depth
-        ]
-        canvas.create_polygon(right_poly, fill=color_right, outline="black", width=1)
-
-        # --- Подписи дат под осью X ---
-        # Разворачиваем текст на 45 градусов для лучшей читаемости, если дат много
-        canvas.create_text(x_start + bar_width / 2, height - margin_bottom + 15, 
-                           text=dates[i], anchor="n", font=("Arial", 9), angle=45)
-
-
-# ---------------------------------------------------------
-# Логика интерфейса (GUI)
-# ---------------------------------------------------------
-def load_and_draw():
-    """Загружает данные из файла и вызывает процедуру рисования"""
-    file_path = filedialog.askopenfilename(
-        title="Выберите файл с данными",
-        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-    )
-    
-    if not file_path:
-        return
-
+def read_data(filename):
+    """Чтение данных из текстового файла"""
     dates = []
-    y_values = []
-
+    values = []
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             for line in f:
                 parts = line.strip().split()
-                if len(parts) >= 2:
+                if len(parts) == 2:
                     dates.append(parts[0])
-                    y_values.append(float(parts[1]))
+                    values.append(float(parts[1]))
+    except FileNotFoundError:
+        messagebox.showerror("Ошибка", f"Файл {filename} не найден!")
+    return dates, values
+
+def draw_3d_chart(dates, num_days, values, fill_code):
+    """
+    Процедура построения трехмерной столбиковой диаграммы.
+    Параметры (согласно заданию):
+    - dates: массив дат
+    - num_days: количество дней
+    - values: массив значений по оси Y
+    - fill_code: код заполнителя (цвет)
+    """
+    global cv
+    
+    # Обновляем размеры полотна
+    cv.update()
+    W = cv.winfo_width()
+    H = cv.winfo_height()
+    
+    cv.delete("all") # Очистка перед рисованием
+    
+    # Отступы для осей и заголовка
+    left_margin = 80
+    right_margin = 50
+    top_margin = 60
+    bottom_margin = 80
+    
+    plot_w = W - left_margin - right_margin
+    plot_h = H - top_margin - bottom_margin
+    
+    # Заголовок диаграммы
+    cv.create_text(W/2, 30, text="Курс немецкой марки к рублю", font=("Arial", 16, "bold"))
+    
+    if num_days == 0 or max(values) == 0:
+        return
         
-        n_days = len(dates)
-        if n_days > 0:
-            # Вызов требуемой процедуры с заданными параметрами
-            # Параметры: canvas, массив дат, количество дней, массив значений, код заполнителя
-            draw_3d_bar_chart(canvas, dates, n_days, y_values, fill_code="#4A90E2")
-            status_label.config(text=f"Загружено: {os.path.basename(file_path)} ({n_days} записей)")
-        else:
-            messagebox.showerror("Ошибка", "Файл не содержит корректных данных.")
-            
-    except Exception as e:
-        messagebox.showerror("Ошибка чтения файла", f"Не удалось прочитать файл:\n{e}")
+    max_val = max(values) * 1.15 # Добавляем запас сверху для красоты
+    
+    # Параметры для создания 3D-эффекта (смещение)
+    dx_3d = 15
+    dy_3d = 15
+    
+    bar_w = plot_w / num_days # Ширина одного столбца
+    
+    # Рисуем оси координат
+    cv.create_line(left_margin, top_margin, left_margin, top_margin + plot_h, width=2)
+    cv.create_line(left_margin, top_margin + plot_h, left_margin + plot_w, top_margin + plot_h, width=2)
+    
+    # Разметка оси Y (сетка и метки)
+    num_y_ticks = 5
+    for i in range(num_y_ticks + 1):
+        val = (max_val / num_y_ticks) * i
+        y_pix = top_margin + plot_h - (val / max_val) * plot_h
+        
+        cv.create_line(left_margin, y_pix, left_margin + plot_w, y_pix, dash=(4, 4), fill='gray')
+        cv.create_line(left_margin - 5, y_pix, left_margin, y_pix, width=2)
+        cv.create_text(left_margin - 10, y_pix, text=f"{val:.1f}", anchor='e', font=("Arial", 10))
+        
+    # Рисуем столбцы
+    for i in range(num_days):
+        val = values[i]
+        h_pix = (val / max_val) * plot_h
+        
+        # Координаты передней грани
+        x1 = left_margin + i * bar_w + 5
+        x2 = x1 + bar_w - 10
+        y1 = top_margin + plot_h - h_pix
+        y2 = top_margin + plot_h
+        
+        # 1. Передняя грань (Прямоугольник)
+        cv.create_rectangle(x1, y1, x2, y2, fill=fill_code, outline='black')
+        
+        # 2. Верхняя грань (Многоугольник для 3D)
+        top_points = [x1, y1, x1 + dx_3d, y1 - dy_3d, x2 + dx_3d, y1 - dy_3d, x2, y1]
+        cv.create_polygon(top_points, fill=fill_code, outline='black')
+        
+        # 3. Боковая грань (Многоугольник для 3D)
+        side_points = [x2, y1, x2 + dx_3d, y1 - dy_3d, x2 + dx_3d, y2 - dy_3d, x2, y2]
+        cv.create_polygon(side_points, fill=fill_code, outline='black')
+        
+        # Подпись даты на оси X
+        x_label = (x1 + x2) / 2 + dx_3d / 2
+        cv.create_text(x_label, top_margin + plot_h + 20, text=dates[i], anchor='n', font=("Arial", 9))
 
+# ==================== ОСНОВНАЯ ЧАСТЬ ПРОГРАММЫ ====================
+if __name__ == "__main__":
+    filename = "data.txt"
+    
+    # 1. Формируем текстовый файл с данными
+    create_test_data(filename) 
+    
+    # 2. Считываем данные
+    dates, values = read_data(filename)
+    num_days = len(dates)
 
-def close_app():
-    """Завершение работы приложения"""
-    if messagebox.askyesno("Выход", "Завершить работу программы?"):
-        root.destroy()
+    # 3. Создаем графический интерфейс (GUI)
+    root = tk.Tk()
+    root.title("Лабораторная работа 8, Вариант 20")
+    root.geometry("800x600")
 
+    # Полотно (Canvas) занимает всю доступную область
+    cv = tk.Canvas(root, bg="white")
+    cv.pack(fill=tk.BOTH, expand=True)
 
-# --- Создание главного окна ---
-root = tk.Tk()
-root.title("Лабораторная работа №8, Вариант 20")
-root.geometry("900x700")
-root.resizable(True, True)
+    # Кнопка для запуска построения диаграммы
+    def on_draw():
+        # Вызов процедуры с передачей всех требуемых параметров
+        draw_3d_chart(dates, num_days, values, "#4C72B0") # "#4C72B0" - код синего заполнителя
 
-# Верхняя панель с кнопками
-control_frame = tk.Frame(root, pady=10)
-control_frame.pack(fill=tk.X)
+    btn = tk.Button(root, text="Построить диаграмму", command=on_draw, font=("Arial", 12))
+    btn.pack(side=tk.BOTTOM, pady=10)
 
-btn_load = tk.Button(control_frame, text="Загрузить данные и построить", 
-                     command=load_and_draw, font=("Arial", 11), bg="#e0e0e0")
-btn_load.pack(side=tk.LEFT, padx=20)
-
-btn_exit = tk.Button(control_frame, text="Выход", 
-                     command=close_app, font=("Arial", 11), bg="#e0e0e0")
-btn_exit.pack(side=tk.RIGHT, padx=20)
-
-status_label = tk.Label(control_frame, text="Данные не загружены", fg="gray", font=("Arial", 10))
-status_label.pack(side=tk.LEFT, padx=20)
-
-# Холст для рисования (Canvas)
-canvas = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=2)
-canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-# Обработчик закрытия окна через крестик
-root.protocol("WM_DELETE_WINDOW", close_app)
-
-# Запуск главного цикла обработки событий
-root.mainloop()
+    # Запуск цикла обработки событий
+    root.mainloop()
